@@ -24,7 +24,9 @@ except ImportError:
     sys.exit("Missing dependency: run  pip install requests")
 
 
-TALLY_URL = "http://localhost:9000"
+TALLY_HOST = "localhost"
+TALLY_PORT = 9000
+TALLY_URL  = f"http://{TALLY_HOST}:{TALLY_PORT}"
 TALLY_TIMEOUT = 30  # seconds
 
 
@@ -311,20 +313,42 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
             Examples:
-              python tally_sales_vouchers.py                          # interactive prompts
+              python tally_sales_vouchers.py                              # interactive prompts
               python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026
-              python tally_sales_vouchers.py -f 2025-04-01 -t 2026-03-31 --url http://localhost:9000
+              python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026 --host 192.168.1.10
+              python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026 --host 192.168.1.10 --port 9002
+              python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026 --url http://tally.local:9000
         """),
     )
     p.add_argument("-f", "--from-date", metavar="DATE",
                    help="Start date  (DD-MM-YYYY | DD/MM/YYYY | YYYY-MM-DD)")
     p.add_argument("-t", "--to-date", metavar="DATE",
                    help="End date    (DD-MM-YYYY | DD/MM/YYYY | YYYY-MM-DD)")
-    p.add_argument("--url", default=TALLY_URL,
-                   help=f"TallyPrime gateway URL (default: {TALLY_URL})")
+
+    conn = p.add_argument_group(
+        "server connection",
+        "Use --host / --port for simple setups, or --url for full control. "
+        "--url takes precedence when all three are provided.",
+    )
+    conn.add_argument("--host", default=TALLY_HOST, metavar="HOST",
+                      help=f"TallyPrime server hostname or IP  (default: {TALLY_HOST})")
+    conn.add_argument("--port", default=TALLY_PORT, metavar="PORT", type=int,
+                      help=f"TallyPrime HTTP gateway port       (default: {TALLY_PORT})")
+    conn.add_argument("--url", default=None, metavar="URL",
+                      help="Full gateway URL — overrides --host and --port")
+
     p.add_argument("--no-narration", action="store_true",
                    help="Hide the Narration column")
     return p
+
+
+def resolve_url(args: argparse.Namespace) -> str:
+    """Return the effective gateway URL from parsed arguments."""
+    if args.url:
+        return args.url.rstrip("/")
+    if args.port < 1 or args.port > 65535:
+        sys.exit(f"Invalid port: {args.port}. Must be between 1 and 65535.")
+    return f"http://{args.host}:{args.port}"
 
 
 # ---------------------------------------------------------------------------
@@ -348,15 +372,17 @@ def main() -> None:
     if from_date > to_date:
         sys.exit(f"from-date ({from_date}) must not be later than to-date ({to_date}).")
 
+    url = resolve_url(args)
+
     # Connectivity check
-    print(f"\nConnecting to TallyPrime at {args.url} …", end=" ", flush=True)
-    company = check_connection_and_get_company(args.url)
+    print(f"\nConnecting to TallyPrime at {url} …", end=" ", flush=True)
+    company = check_connection_and_get_company(url)
     print(f"OK  [{company}]")
 
     # Fetch vouchers
     print("Fetching Sales Vouchers …", end=" ", flush=True)
     xml_request = _xml_sales_vouchers(from_date, to_date)
-    root = _post_xml(xml_request, args.url)
+    root = _post_xml(xml_request, url)
     vouchers = parse_vouchers(root)
     print(f"found {len(vouchers)}.")
 

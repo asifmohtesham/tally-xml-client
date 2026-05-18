@@ -58,22 +58,35 @@ python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026
 ### All options
 
 ```
-usage: tally_sales_vouchers [-h] [-f DATE] [-t DATE] [--url URL] [--no-narration]
+usage: tally_sales_vouchers [-h] [-f DATE] [-t DATE] [--host HOST] [--port PORT] [--url URL] [--no-narration]
 
 options:
   -f, --from-date DATE   Start date
   -t, --to-date   DATE   End date
-  --url           URL    TallyPrime gateway URL  (default: http://localhost:9000)
   --no-narration         Hide the Narration column
+
+server connection:
+  --host HOST            TallyPrime server hostname or IP  (default: localhost)
+  --port PORT            TallyPrime HTTP gateway port       (default: 9000)
+  --url  URL             Full gateway URL — overrides --host and --port
 ```
 
 **Accepted date formats:** `DD-MM-YYYY` · `DD/MM/YYYY` · `YYYY-MM-DD` · `DD-Mon-YYYY`
 
-### Custom port
+### Connect to a remote or non-default server
 
 ```bash
-python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026 --url http://localhost:9002
+# Different host (LAN machine running TallyPrime)
+python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026 --host 192.168.1.10
+
+# Different host and port
+python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026 --host 192.168.1.10 --port 9002
+
+# Full URL override (e.g. named host, non-standard scheme)
+python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026 --url http://tally.local:9000
 ```
+
+`--url` takes precedence when provided alongside `--host`/`--port`.
 
 ---
 
