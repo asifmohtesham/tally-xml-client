@@ -1,8 +1,8 @@
 # tally-xml-client
 
-A Python CLI that connects to a local **TallyPrime Gold** server and lists **Sales Vouchers** for any date range — directly from your terminal, no third-party Tally connector required.
+A Python tool that connects to a local **TallyPrime Gold** server and lists **Sales Vouchers** for any date range. Runs as a **desktop GUI** (default) or a **headless CLI** (when flags are passed).
 
-Communication happens over TallyPrime's built-in **XML HTTP gateway** using an inline TDL collection, so filtering is done server-side and only matching vouchers are returned.
+Communication uses TallyPrime's built-in XML HTTP gateway with an inline TDL collection — no third-party Tally connector required.
 
 ---
 
@@ -13,53 +13,46 @@ Communication happens over TallyPrime's built-in **XML HTTP gateway** using an i
 | Python | 3.10 + |
 | TallyPrime Gold | Any recent release |
 | [`requests`](https://pypi.org/project/requests/) | Any |
-
-Install the dependency:
+| [`customtkinter`](https://pypi.org/project/customtkinter/) | Any |
 
 ```bash
-pip install requests
+pip install requests customtkinter
 ```
 
 ---
 
 ## TallyPrime setup (one-time)
 
-The XML gateway must be enabled in TallyPrime before running this tool:
-
 1. Open TallyPrime and load your company.
 2. Go to **Gateway of Tally → F12 (Configure) → Advanced Configuration**.
 3. Set **"Enable TallyPrime to act as HTTP Server"** to **Yes**.
-4. Note the port — **9000** is the default and what this tool uses.
+4. Leave the port at **9000** (default).
 
 ---
 
 ## Usage
 
-### Interactive mode (prompts for dates)
+### GUI (no arguments)
 
 ```bash
-python tally_sales_vouchers.py
+python main.py
 ```
 
-```
-From date (DD-MM-YYYY): 01-04-2025
-To   date (DD-MM-YYYY): 31-03-2026
+Opens a desktop window. Enter the date range and click **Fetch**.
 
-Connecting to TallyPrime at http://localhost:9000 … OK  [ABC Pvt Ltd]
-Fetching Sales Vouchers … found 42.
-```
+Server settings (host / port) are saved automatically to `~/.tally_xml_client.json` and restored on next launch.
 
-### CLI flags
+### CLI (with arguments)
 
 ```bash
-python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026
+python main.py -f 01-04-2025 -t 31-03-2026
 ```
 
-### All options
+Runs headlessly and prints a formatted table to the terminal.
+
+### All CLI options
 
 ```
-usage: tally_sales_vouchers [-h] [-f DATE] [-t DATE] [--host HOST] [--port PORT] [--url URL] [--no-narration]
-
 options:
   -f, --from-date DATE   Start date
   -t, --to-date   DATE   End date
@@ -73,55 +66,32 @@ server connection:
 
 **Accepted date formats:** `DD-MM-YYYY` · `DD/MM/YYYY` · `YYYY-MM-DD` · `DD-Mon-YYYY`
 
-### Connect to a remote or non-default server
+### Connect to a remote server
 
 ```bash
-# Different host (LAN machine running TallyPrime)
-python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026 --host 192.168.1.10
-
-# Different host and port
-python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026 --host 192.168.1.10 --port 9002
-
-# Full URL override (e.g. named host, non-standard scheme)
-python tally_sales_vouchers.py -f 01-04-2025 -t 31-03-2026 --url http://tally.local:9000
+python main.py -f 01-04-2025 -t 31-03-2026 --host 192.168.1.10
+python main.py -f 01-04-2025 -t 31-03-2026 --host 192.168.1.10 --port 9002
+python main.py -f 01-04-2025 -t 31-03-2026 --url http://tally.local:9000
 ```
-
-`--url` takes precedence when provided alongside `--host`/`--port`.
 
 ---
 
-## Sample output
+## Project structure
 
 ```
-          Sales Vouchers  |  ABC Pvt Ltd  |  01-04-2025 to 31-03-2026
-================================================================================
-Date        Voucher No.     Party Name                     Amount (Rs)   Ref / Order No.   Narration
-----------  --------------  -----------------------------  ------------  ----------------  ----------------------------
-01-04-2025  SAL/25-26/001   XYZ Traders                      45,000.00  PO-2025-001        GST Invoice
-03-04-2025  SAL/25-26/002   Ravi Enterprises                1,12,500.00  PO-2025-002        Monthly supply
-...
-----------  --------------  -----------------------------  ------------  ----------------  ----------------------------
-                            Total  (42 vouchers)           8,34,250.00
+tally-xml-client/
+├── tally_xml_client/
+│   ├── __init__.py   # package, version
+│   ├── core.py       # HTTP, TDL XML, parsing — no side effects
+│   ├── cli.py        # terminal UI and argparse
+│   └── gui.py        # CustomTkinter desktop window
+├── main.py           # entry point: no args → GUI, args → CLI
+└── tests/
+    └── test_core.py  # unit tests for core.py
 ```
-
-Columns displayed: Date · Voucher No. · Party Name · Amount · Ref / Order No. · Narration
 
 ---
 
 ## How it works
 
-TallyPrime exposes an HTTP server that accepts XML payloads following the **TDL (Tally Definition Language)** schema. This tool:
-
-1. **Checks connectivity** by querying the active company name.
-2. **Sends a TDL collection request** with `VoucherTypeName = "Sales"` and the requested date bounds (`SVFROMDATE` / `SVTODATE`) applied server-side.
-3. **Parses the XML response** and renders results as a formatted table with a grand total.
-
-No Tally SDK, COM object, or ODBC driver is needed — just a plain HTTP POST.
-
----
-
-## Files
-
-| File | Description |
-|---|---|
-| `tally_sales_vouchers.py` | Main script — self-contained, single file |
+TallyPrime exposes an HTTP server accepting XML payloads in TDL schema. This tool POSTs an inline TDL collection request filtered to `VoucherTypeName = "Sales"` with date bounds applied server-side. No Tally SDK, COM object, or ODBC driver needed.
