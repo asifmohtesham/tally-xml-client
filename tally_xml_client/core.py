@@ -48,3 +48,116 @@ def _safe_text(element: ET.Element | None, default: str = "") -> str:
     if element is None:
         return default
     return (element.text or "").strip()
+
+
+def _xml_company_info() -> str:
+    return """<ENVELOPE>
+  <HEADER>
+    <TALLYREQUEST>Export Data</TALLYREQUEST>
+  </HEADER>
+  <BODY>
+    <EXPORTDATA>
+      <REQUESTDESC>
+        <REPORTNAME>List of Companies</REPORTNAME>
+        <STATICVARIABLES>
+          <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        </STATICVARIABLES>
+      </REQUESTDESC>
+    </EXPORTDATA>
+  </BODY>
+</ENVELOPE>"""
+
+
+def _xml_sales_vouchers(from_date: date, to_date: date) -> str:
+    fd = from_date.strftime("%Y%m%d")
+    td = to_date.strftime("%Y%m%d")
+    return f"""<ENVELOPE>
+  <HEADER>
+    <TALLYREQUEST>Export Data</TALLYREQUEST>
+  </HEADER>
+  <BODY>
+    <EXPORTDATA>
+      <REQUESTDESC>
+        <REPORTNAME>$$CollectionName:PyTallySalesVouchers</REPORTNAME>
+        <STATICVARIABLES>
+          <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+          <SVFROMDATE>{fd}</SVFROMDATE>
+          <SVTODATE>{td}</SVTODATE>
+        </STATICVARIABLES>
+        <TDLMESSAGE>
+          <COLLECTION NAME="PyTallySalesVouchers" ISMODIFY="No">
+            <TYPE>Voucher</TYPE>
+            <FILTER>PyIsSalesVoucher</FILTER>
+          </COLLECTION>
+          <SYSTEM TYPE="Formulae" NAME="PyIsSalesVoucher">
+            $$VoucherTypeName = "Sales"
+          </SYSTEM>
+        </TDLMESSAGE>
+      </REQUESTDESC>
+    </EXPORTDATA>
+  </BODY>
+</ENVELOPE>"""
+
+
+def _post_xml(xml_body: str, url: str) -> ET.Element:
+    headers = {
+        "Content-Type": "text/xml;charset=utf-8",
+        "Content-Length": str(len(xml_body.encode("utf-8"))),
+    }
+    try:
+        resp = requests.post(
+            url, data=xml_body.encode("utf-8"), headers=headers, timeout=TALLY_TIMEOUT
+        )
+        resp.raise_for_status()
+    except requests.exceptions.ConnectionError:
+        raise RuntimeError(
+            f"Cannot reach TallyPrime at {url}. "
+            "Ensure TallyPrime is running and the HTTP server is enabled on port 9000."
+        )
+    except requests.exceptions.Timeout:
+        raise RuntimeError(
+            f"Request timed out after {TALLY_TIMEOUT}s. TallyPrime may be busy."
+        )
+    except requests.exceptions.HTTPError as exc:
+        raise RuntimeError(f"HTTP error: {exc}")
+
+    try:
+        return ET.fromstring(resp.content)
+    except ET.ParseError as exc:
+        raise RuntimeError(f"Could not parse Tally response as XML: {exc}")
+
+
+def parse_vouchers(root: ET.Element) -> list[dict]:
+    vouchers = []
+    for voucher in root.iter("VOUCHER"):
+        vtype = (
+            _safe_text(voucher.find("VOUCHERTYPENAME")) or voucher.get("VCHTYPE", "")
+        ).strip()
+        if vtype.lower() != "sales":
+            continue
+        row = {
+            "date":       _parse_tally_date(_safe_text(voucher.find("DATE"))),
+            "voucher_no": _safe_text(voucher.find("VOUCHERNUMBER")),
+            "party":      _safe_text(voucher.find("PARTYLEDGERNAME")),
+            "amount":     format_amount(_safe_text(voucher.find("AMOUNT"))),
+            "narration":  _safe_text(voucher.find("NARRATION")),
+            "reference":  _safe_text(voucher.find("REFERENCE")),
+            "vch_type":   vtype,
+        }
+        vouchers.append(row)
+    vouchers.sort(key=lambda v: (v["date"], v["voucher_no"]))
+    return vouchers
+
+
+def check_connection(url: str) -> str:
+    root = _post_xml(_xml_company_info(), url)
+    for company in root.iter("COMPANY"):
+        name = company.findtext("NAME") or company.get("NAME", "")
+        if name:
+            return name
+    return root.findtext(".//COMPANYNAME") or root.findtext(".//NAME") or "Unknown"
+
+
+def fetch_vouchers(url: str, from_date: date, to_date: date) -> list[dict]:
+    root = _post_xml(_xml_sales_vouchers(from_date, to_date), url)
+    return parse_vouchers(root)

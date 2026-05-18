@@ -48,3 +48,108 @@ class TestFormatAmount:
 
     def test_invalid_returns_stripped_string(self):
         assert core.format_amount("  N/A  ") == "N/A"
+
+
+class TestParseVouchers:
+    def test_filters_to_sales_only(self):
+        xml = """<ENVELOPE>
+          <VOUCHER>
+            <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
+            <DATE>20250401</DATE>
+            <VOUCHERNUMBER>SAL/001</VOUCHERNUMBER>
+            <PARTYLEDGERNAME>XYZ Traders</PARTYLEDGERNAME>
+            <AMOUNT>-45000</AMOUNT>
+          </VOUCHER>
+          <VOUCHER>
+            <VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>
+            <DATE>20250401</DATE>
+            <VOUCHERNUMBER>PUR/001</VOUCHERNUMBER>
+            <AMOUNT>-5000</AMOUNT>
+          </VOUCHER>
+        </ENVELOPE>"""
+        result = core.parse_vouchers(ET.fromstring(xml))
+        assert len(result) == 1
+        assert result[0]["voucher_no"] == "SAL/001"
+
+    def test_amount_is_absolute_value(self):
+        xml = """<ENVELOPE>
+          <VOUCHER>
+            <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
+            <DATE>20250401</DATE>
+            <VOUCHERNUMBER>SAL/001</VOUCHERNUMBER>
+            <AMOUNT>-45000</AMOUNT>
+          </VOUCHER>
+        </ENVELOPE>"""
+        result = core.parse_vouchers(ET.fromstring(xml))
+        assert result[0]["amount"] == "45,000.00"
+
+    def test_sorted_by_date_then_voucher_number(self):
+        xml = """<ENVELOPE>
+          <VOUCHER>
+            <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
+            <DATE>20250402</DATE>
+            <VOUCHERNUMBER>SAL/002</VOUCHERNUMBER>
+            <AMOUNT>-1000</AMOUNT>
+          </VOUCHER>
+          <VOUCHER>
+            <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
+            <DATE>20250401</DATE>
+            <VOUCHERNUMBER>SAL/001</VOUCHERNUMBER>
+            <AMOUNT>-2000</AMOUNT>
+          </VOUCHER>
+        </ENVELOPE>"""
+        result = core.parse_vouchers(ET.fromstring(xml))
+        assert result[0]["voucher_no"] == "SAL/001"
+        assert result[1]["voucher_no"] == "SAL/002"
+
+    def test_empty_envelope_returns_empty_list(self):
+        root = ET.fromstring("<ENVELOPE></ENVELOPE>")
+        assert core.parse_vouchers(root) == []
+
+
+class TestPostXml:
+    def test_connection_error_raises_runtime_error(self):
+        with patch("tally_xml_client.core.requests.post") as mock_post:
+            mock_post.side_effect = req_lib.exceptions.ConnectionError()
+            with pytest.raises(RuntimeError, match="Cannot reach"):
+                core._post_xml("<XML/>", "http://localhost:9000")
+
+    def test_timeout_raises_runtime_error(self):
+        with patch("tally_xml_client.core.requests.post") as mock_post:
+            mock_post.side_effect = req_lib.exceptions.Timeout()
+            with pytest.raises(RuntimeError, match="timed out"):
+                core._post_xml("<XML/>", "http://localhost:9000")
+
+    def test_invalid_xml_response_raises_runtime_error(self):
+        mock_resp = MagicMock()
+        mock_resp.content = b"not xml <<<>>>"
+        mock_resp.raise_for_status = MagicMock()
+        with patch("tally_xml_client.core.requests.post", return_value=mock_resp):
+            with pytest.raises(RuntimeError, match="parse"):
+                core._post_xml("<XML/>", "http://localhost:9000")
+
+    def test_valid_response_returns_element(self):
+        mock_resp = MagicMock()
+        mock_resp.content = b"<ROOT><DATA>ok</DATA></ROOT>"
+        mock_resp.raise_for_status = MagicMock()
+        with patch("tally_xml_client.core.requests.post", return_value=mock_resp):
+            root = core._post_xml("<XML/>", "http://localhost:9000")
+        assert root.tag == "ROOT"
+
+
+class TestCheckConnection:
+    def test_returns_company_name_from_name_element(self):
+        mock_resp = MagicMock()
+        mock_resp.content = (
+            b"<ENVELOPE><COMPANY><NAME>ABC Pvt Ltd</NAME></COMPANY></ENVELOPE>"
+        )
+        mock_resp.raise_for_status = MagicMock()
+        with patch("tally_xml_client.core.requests.post", return_value=mock_resp):
+            name = core.check_connection("http://localhost:9000")
+        assert name == "ABC Pvt Ltd"
+
+    def test_propagates_runtime_error_on_connection_failure(self):
+        with patch("tally_xml_client.core.requests.post") as mock_post:
+            mock_post.side_effect = req_lib.exceptions.ConnectionError()
+            with pytest.raises(RuntimeError):
+                core.check_connection("http://localhost:9000")
