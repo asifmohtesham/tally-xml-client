@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 
 import customtkinter as ctk
+from tkcalendar import DateEntry
 
 from tally_xml_client import core
 
@@ -95,12 +96,19 @@ class TallyApp(ctk.CTk):
         # Query row
         qf = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         qf.grid(row=1, column=0, sticky="ew", padx=12, pady=(8, 4))
+        today = date.today()
         ctk.CTkLabel(qf, text="From").grid(row=0, column=0, padx=(0, 4))
-        self._from_entry = ctk.CTkEntry(qf, width=110, placeholder_text="DD-MM-YYYY")
-        self._from_entry.grid(row=0, column=1, padx=4)
+        self._from_entry = DateEntry(
+            qf, width=12, date_pattern="dd-mm-yyyy",
+            year=today.year, month=today.month, day=today.day,
+        )
+        self._from_entry.grid(row=0, column=1, padx=4, ipady=3)
         ctk.CTkLabel(qf, text="To").grid(row=0, column=2, padx=(12, 4))
-        self._to_entry = ctk.CTkEntry(qf, width=110, placeholder_text="DD-MM-YYYY")
-        self._to_entry.grid(row=0, column=3, padx=4)
+        self._to_entry = DateEntry(
+            qf, width=12, date_pattern="dd-mm-yyyy",
+            year=today.year, month=today.month, day=today.day,
+        )
+        self._to_entry.grid(row=0, column=3, padx=4, ipady=3)
         self._fetch_btn = ctk.CTkButton(qf, text="Fetch", width=90, command=self._on_fetch)
         self._fetch_btn.grid(row=0, column=4, padx=(16, 0))
 
@@ -146,8 +154,6 @@ class TallyApp(ctk.CTk):
     def _on_fetch(self) -> None:
         host = self._host_entry.get().strip()
         port_str = self._port_entry.get().strip()
-        from_str = self._from_entry.get().strip()
-        to_str = self._to_entry.get().strip()
 
         if not host:
             self._set_status("Host cannot be empty", error=True)
@@ -160,13 +166,13 @@ class TallyApp(ctk.CTk):
             self._set_status("Port must be a number between 1 and 65535", error=True)
             return
         try:
-            from_date = core.parse_date_arg(from_str)
-        except ValueError:
+            from_date = self._from_entry.get_date()
+        except Exception:
             self._set_status("Invalid From date — use DD-MM-YYYY", error=True)
             return
         try:
-            to_date = core.parse_date_arg(to_str)
-        except ValueError:
+            to_date = self._to_entry.get_date()
+        except Exception:
             self._set_status("Invalid To date — use DD-MM-YYYY", error=True)
             return
         if from_date > to_date:

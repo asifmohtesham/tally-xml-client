@@ -14,9 +14,10 @@ Communication uses TallyPrime's built-in XML HTTP gateway with an inline TDL col
 | TallyPrime Gold | Any recent release |
 | [`requests`](https://pypi.org/project/requests/) | Any |
 | [`customtkinter`](https://pypi.org/project/customtkinter/) | Any |
+| [`tkcalendar`](https://pypi.org/project/tkcalendar/) | Any |
 
 ```bash
-pip install requests customtkinter
+pip install requests customtkinter tkcalendar
 ```
 
 ---
@@ -89,6 +90,26 @@ tally-xml-client/
 └── tests/
     └── test_core.py  # unit tests for core.py
 ```
+
+---
+
+## Authentication (multi-user setups only)
+
+By default, TallyPrime's XML gateway requires no credentials — the server accepts any request from a client that can reach the port. If your company has **multi-user security** enabled (Gateway of Tally → F12 → Security Control → Use Security Features), provide your Tally username and password.
+
+### GUI
+
+Enter credentials in the **User** and **Pass** fields in the server settings row. They are saved to `~/.tally_xml_client.json` alongside host and port and restored on next launch. The password field is masked.
+
+### CLI
+
+```bash
+python main.py -f 01-04-2025 -t 31-03-2026 --username admin --password secret
+```
+
+Both flags default to empty. When `--username` is omitted, no credential elements are sent in the XML request, so single-user Gold setups need no changes.
+
+> **Note:** Credentials are stored in plaintext in `~/.tally_xml_client.json`. This is acceptable for a local desktop tool but avoid using a high-privilege account if the machine is shared.
 
 ---
 
