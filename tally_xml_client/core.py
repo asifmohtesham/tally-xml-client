@@ -50,10 +50,21 @@ def _safe_text(element: ET.Element | None, default: str = "") -> str:
     return (element.text or "").strip()
 
 
-def _xml_company_info() -> str:
-    return """<ENVELOPE>
+def _creds_xml(username: str, password: str) -> str:
+    """Return credential XML lines to embed in <HEADER>, or empty string."""
+    if not username:
+        return ""
+    creds = f"\n    <SVCUSERNAME>{username}</SVCUSERNAME>"
+    if password:
+        creds += f"\n    <SVCPASSWORD>{password}</SVCPASSWORD>"
+    return creds
+
+
+def _xml_company_info(username: str = "", password: str = "") -> str:
+    creds = _creds_xml(username, password)
+    return f"""<ENVELOPE>
   <HEADER>
-    <TALLYREQUEST>Export Data</TALLYREQUEST>
+    <TALLYREQUEST>Export Data</TALLYREQUEST>{creds}
   </HEADER>
   <BODY>
     <EXPORTDATA>
@@ -68,12 +79,14 @@ def _xml_company_info() -> str:
 </ENVELOPE>"""
 
 
-def _xml_sales_vouchers(from_date: date, to_date: date) -> str:
+def _xml_sales_vouchers(from_date: date, to_date: date,
+                        username: str = "", password: str = "") -> str:
     fd = from_date.strftime("%Y%m%d")
     td = to_date.strftime("%Y%m%d")
+    creds = _creds_xml(username, password)
     return f"""<ENVELOPE>
   <HEADER>
-    <TALLYREQUEST>Export Data</TALLYREQUEST>
+    <TALLYREQUEST>Export Data</TALLYREQUEST>{creds}
   </HEADER>
   <BODY>
     <EXPORTDATA>
@@ -149,8 +162,8 @@ def parse_vouchers(root: ET.Element) -> list[dict]:
     return vouchers
 
 
-def check_connection(url: str) -> str:
-    root = _post_xml(_xml_company_info(), url)
+def check_connection(url: str, username: str = "", password: str = "") -> str:
+    root = _post_xml(_xml_company_info(username, password), url)
     for company in root.iter("COMPANY"):
         name = company.findtext("NAME") or company.get("NAME", "")
         if name:
@@ -158,6 +171,7 @@ def check_connection(url: str) -> str:
     return root.findtext(".//COMPANYNAME") or root.findtext(".//NAME") or "Unknown"
 
 
-def fetch_vouchers(url: str, from_date: date, to_date: date) -> list[dict]:
-    root = _post_xml(_xml_sales_vouchers(from_date, to_date), url)
+def fetch_vouchers(url: str, from_date: date, to_date: date,
+                   username: str = "", password: str = "") -> list[dict]:
+    root = _post_xml(_xml_sales_vouchers(from_date, to_date, username, password), url)
     return parse_vouchers(root)

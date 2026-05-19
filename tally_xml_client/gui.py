@@ -33,15 +33,20 @@ def _load_settings() -> dict:
     try:
         data = json.loads(_SETTINGS_FILE.read_text())
         return {
-            "host": str(data.get("host", core.TALLY_HOST)),
-            "port": int(data.get("port", core.TALLY_PORT)),
+            "host":     str(data.get("host", core.TALLY_HOST)),
+            "port":     int(data.get("port", core.TALLY_PORT)),
+            "username": str(data.get("username", "")),
+            "password": str(data.get("password", "")),
         }
     except (FileNotFoundError, json.JSONDecodeError, ValueError):
-        return {"host": core.TALLY_HOST, "port": core.TALLY_PORT}
+        return {"host": core.TALLY_HOST, "port": core.TALLY_PORT,
+                "username": "", "password": ""}
 
 
-def _save_settings(host: str, port: int) -> None:
-    _SETTINGS_FILE.write_text(json.dumps({"host": host, "port": port}))
+def _save_settings(host: str, port: int, username: str, password: str) -> None:
+    _SETTINGS_FILE.write_text(
+        json.dumps({"host": host, "port": port, "username": username, "password": password})
+    )
 
 
 class TallyApp(ctk.CTk):
@@ -75,9 +80,17 @@ class TallyApp(ctk.CTk):
         self._host_entry.insert(0, self._settings["host"])
         self._host_entry.grid(row=0, column=2, padx=4)
         ctk.CTkLabel(sf, text="Port").grid(row=0, column=3, padx=(12, 4))
-        self._port_entry = ctk.CTkEntry(sf, width=70)
+        self._port_entry = ctk.CTkEntry(sf, width=60)
         self._port_entry.insert(0, str(self._settings["port"]))
         self._port_entry.grid(row=0, column=4, padx=(4, 12))
+        ctk.CTkLabel(sf, text="User").grid(row=0, column=5, padx=(4, 4))
+        self._user_entry = ctk.CTkEntry(sf, width=110)
+        self._user_entry.insert(0, self._settings["username"])
+        self._user_entry.grid(row=0, column=6, padx=4)
+        ctk.CTkLabel(sf, text="Pass").grid(row=0, column=7, padx=(8, 4))
+        self._pass_entry = ctk.CTkEntry(sf, width=100, show="*")
+        self._pass_entry.insert(0, self._settings["password"])
+        self._pass_entry.grid(row=0, column=8, padx=(4, 12))
 
         # Query row
         qf = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
@@ -160,18 +173,21 @@ class TallyApp(ctk.CTk):
             self._set_status("From date must not be later than To date", error=True)
             return
 
-        _save_settings(host, port)
+        username = self._user_entry.get().strip()
+        password = self._pass_entry.get()
+        _save_settings(host, port, username, password)
         url = core.build_url(host, port)
         self._fetch_btn.configure(state="disabled")
         self._start_anim()
         threading.Thread(
-            target=self._do_fetch, args=(url, from_date, to_date), daemon=True
+            target=self._do_fetch, args=(url, from_date, to_date, username, password), daemon=True
         ).start()
 
-    def _do_fetch(self, url: str, from_date: date, to_date: date) -> None:
+    def _do_fetch(self, url: str, from_date: date, to_date: date,
+                  username: str, password: str) -> None:
         try:
-            company = core.check_connection(url)
-            vouchers = core.fetch_vouchers(url, from_date, to_date)
+            company = core.check_connection(url, username, password)
+            vouchers = core.fetch_vouchers(url, from_date, to_date, username, password)
             self.after(0, lambda: self._on_success(company, vouchers))
         except RuntimeError as exc:
             msg = str(exc)

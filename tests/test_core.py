@@ -153,3 +153,29 @@ class TestCheckConnection:
             mock_post.side_effect = req_lib.exceptions.ConnectionError()
             with pytest.raises(RuntimeError):
                 core.check_connection("http://localhost:9000")
+
+
+class TestCredsXml:
+    def test_empty_username_returns_empty_string(self):
+        assert core._creds_xml("", "") == ""
+        assert core._creds_xml("", "secret") == ""
+
+    def test_username_only_includes_svcusername(self):
+        result = core._creds_xml("admin", "")
+        assert "<SVCUSERNAME>admin</SVCUSERNAME>" in result
+        assert "SVCPASSWORD" not in result
+
+    def test_username_and_password_includes_both(self):
+        result = core._creds_xml("admin", "secret")
+        assert "<SVCUSERNAME>admin</SVCUSERNAME>" in result
+        assert "<SVCPASSWORD>secret</SVCPASSWORD>" in result
+
+    def test_credentials_injected_into_company_info_xml(self):
+        xml = core._xml_company_info("admin", "secret")
+        assert "<SVCUSERNAME>admin</SVCUSERNAME>" in xml
+        assert "<SVCPASSWORD>secret</SVCPASSWORD>" in xml
+
+    def test_no_credentials_in_xml_when_username_empty(self):
+        xml = core._xml_company_info("", "")
+        assert "SVCUSERNAME" not in xml
+        assert "SVCPASSWORD" not in xml

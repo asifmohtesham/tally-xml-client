@@ -120,6 +120,10 @@ def _build_parser() -> argparse.ArgumentParser:
                       help=f"TallyPrime HTTP gateway port       (default: {core.TALLY_PORT})")
     conn.add_argument("--url", default=None, metavar="URL",
                       help="Full gateway URL — overrides --host and --port")
+    conn.add_argument("--username", default="", metavar="USER",
+                      help="TallyPrime username (only needed when multi-user security is on)")
+    conn.add_argument("--password", default="", metavar="PASS",
+                      help="TallyPrime password")
     p.add_argument("--no-narration", action="store_true",
                    help="Hide the Narration column")
     return p
@@ -149,14 +153,14 @@ def main() -> None:
 
     print(f"\nConnecting to TallyPrime at {url} …", end=" ", flush=True)
     try:
-        company = core.check_connection(url)
+        company = core.check_connection(url, args.username, args.password)
     except RuntimeError as exc:
         sys.exit(str(exc))
     print(f"OK  [{company}]")
 
     print("Fetching Sales Vouchers …", end=" ", flush=True)
     try:
-        vouchers = core.fetch_vouchers(url, from_date, to_date)
+        vouchers = core.fetch_vouchers(url, from_date, to_date, args.username, args.password)
     except RuntimeError as exc:
         sys.exit(str(exc))
     print(f"found {len(vouchers)}.")
